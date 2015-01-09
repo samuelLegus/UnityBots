@@ -28,7 +28,7 @@ public class BotScript : Pathfinding
 	public List<string> HostileTags; //For this simulation I'm going to use "RedTeam", "BlueTeam", "Neutral"
 	private List<GameObject> Hostiles;
 	
-	public List<GameObject> WaypointObjects = new List<GameObject>();
+	private List<GameObject> _waypointObjects = new List<GameObject>();
 	private List<Waypoint> _waypoints = new List<Waypoint>();
 	
 	public float SightDistance = 25.0f;
@@ -168,9 +168,10 @@ public class BotScript : Pathfinding
 	
 	void Start () 
 	{
-		for(int i = 0; i < WaypointObjects.Count; i++)
+		//Finds all the waypoints in the scene and constructs our waypoint object out of them.
+		foreach(GameObject waypoint in GameObject.FindGameObjectsWithTag("Waypoint"))
 		{
-			_waypoints.Add (new Waypoint(WaypointObjects[i].transform.position ,false));
+			_waypoints.Add(new Waypoint(waypoint.transform.position, false));
 		}
 		
 		foreach(string tag in HostileTags)
