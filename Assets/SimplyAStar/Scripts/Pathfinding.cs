@@ -46,7 +46,12 @@ public class Pathfinding : MonoBehaviour
     {
         if (Path.Count > 0)
         {
-			
+        	//rotate us towards the next node
+			Vector3 targetDir = (Path[0] - transform.position).normalized;
+			Quaternion lookRotation = Quaternion.LookRotation (targetDir);
+			transform.rotation = Quaternion.Slerp(transform.rotation, lookRotation, Time.deltaTime * 20.0f );
+        	
+        	//move
             transform.position = Vector3.MoveTowards(transform.position, Path[0], Time.deltaTime * 100.0f);
             if (Vector3.Distance(transform.position, Path[0]) < 0.4F)
             {

@@ -1,7 +1,7 @@
 ﻿using UnityEngine;
-using System.Collections.Generic;
-using System.Collections;
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.Linq;
 
 public class Waypoint
@@ -24,16 +24,26 @@ public class BotScript : Pathfinding
 	
 	public GameObject Target;
 	public GameObject Gun;
+	public GameObject BulletPrefab;
+	public List<string> HostileTags; //For this simulation I'm going to use "RedTeam", "BlueTeam", "Neutral"
+	private List<GameObject> Hostiles;
+	
 	public List<GameObject> WaypointObjects = new List<GameObject>();
 	private List<Waypoint> _waypoints = new List<Waypoint>();
-	private Waypoint _destination = new Waypoint(new Vector3(0,0,0), false);
+	
 	public float SightDistance = 25.0f;
 	public float TurnRate = 10.0f;
 	public float FieldOfView = 110.0f;
+	public int ShotDelay = 100;
+	bool _nextWaypointDetermined = false;
+	bool _targetLocked = false;
+	int _exploredNodes = 0;
+	private DateTime _lastShot = DateTime.Now;
 
 	#endregion
 
-	#region Behaviour Tree
+	#region Decision Tree Components
+	
 	Action Sequence(Action a, Action b) 
 	{
 		return () => { a(); b(); };
@@ -72,41 +82,46 @@ public class BotScript : Pathfinding
 		return true;
 	}
 	
-	bool SearchForTarget()
+	bool TargetInLoS()
 	{
-		//Done
-		Vector3 playerDir = (Target.transform.position - transform.position).normalized;
-		
-		Ray ray = new Ray(Gun.transform.position, playerDir);
-		RaycastHit hit;
-		Debug.DrawRay (ray.origin, ray.direction * SightDistance , Color.green );
-		
-		//Vector3.Angle returns in degrees 
-		if(		Vector3.Angle ( transform.forward, playerDir) < FieldOfView * .5 
-		   && 	Vector3.Distance (transform.position, Target.transform.position) < SightDistance)
+		if(Target)
 		{
-			return true;
+			//Done
+			Vector3 targetDir = (Target.transform.position - transform.position).normalized;
+			
+			//Ray ray = new Ray(Gun.transform.position, targetDir);
+			//RaycastHit hit;
+			//Debug.DrawRay (ray.origin, ray.direction * SightDistance , Color.green );
+			
+			//Vector3.Angle returns in degrees 
+			if(		Vector3.Angle ( transform.forward, targetDir) < FieldOfView * .5 
+			   && 	Vector3.Distance (transform.position, Target.transform.position) < SightDistance)
+			{
+				return true;
+			}
 		}
 		return false;
 	}
 	
-	bool _targetLocked = false;
-	int _exploredNodes = 0;
+	bool CanShoot()
+	{
+		return DateTime.Now >= _lastShot + new TimeSpan(0,0,0,0, ShotDelay);
+	}
 	
 	void Wander()
 	{
 		List<Waypoint> sortedWaypoints = _waypoints.OrderBy (Waypoint => Waypoint.distanceFromTarget).ToList ();
 		sortedWaypoints = _waypoints.OrderBy (Waypoint => Waypoint.explored).ToList ();
 		
-		if(!_targetLocked)	
+		if(!_nextWaypointDetermined)	
 		{
-			_targetLocked = true;
+			_nextWaypointDetermined = true;
 			FindPath ( transform.position, sortedWaypoints[0].position);
 		}
 		
-		if(_targetLocked && Vector3.Distance (transform.position, sortedWaypoints[0].position) < 5.0f)
+		if(_nextWaypointDetermined && Vector3.Distance (transform.position, sortedWaypoints[0].position) < 5.0f)
 		{
-			_targetLocked = false;
+			_nextWaypointDetermined = false;
 			sortedWaypoints[0].explored = true;
 			_exploredNodes++;
 		}
@@ -119,8 +134,8 @@ public class BotScript : Pathfinding
 			}
 			_exploredNodes = 0;
 		}
-	
 		
+		Move ();
 	}
 	
 	void CloseDistanceToTarget()
@@ -128,9 +143,23 @@ public class BotScript : Pathfinding
 	
 	}
 	
+
 	void Shoot()
 	{
-	
+		if(Target)
+		{
+			//rotate us towards the target
+			Vector3 targetDir = (Target.transform.position - transform.position).normalized;
+			Quaternion lookRotation = Quaternion.LookRotation (targetDir);
+			transform.rotation = Quaternion.Slerp(transform.rotation, lookRotation, Time.deltaTime * TurnRate );
+			
+			//shoot
+			_lastShot = DateTime.Now;
+			GameObject newBullet = Instantiate (BulletPrefab, Gun.transform.position, Gun.transform.rotation) as GameObject;
+			Rigidbody rb = newBullet.GetComponent<Rigidbody>();
+			Physics.IgnoreCollision(newBullet.collider, collider); 
+			rb.velocity = (Target.transform.position - Gun.transform.position).normalized * 50.0f;
+		}
 	}
 	
 	#endregion
@@ -143,8 +172,16 @@ public class BotScript : Pathfinding
 		{
 			_waypoints.Add (new Waypoint(WaypointObjects[i].transform.position ,false));
 		}
-		_destination = _waypoints[0];
-		AI = Wander;
+		
+		foreach(string tag in HostileTags)
+		{
+			foreach(GameObject obj in GameObject.FindGameObjectsWithTag (tag))
+			{
+				Hostiles.Add (obj);
+			}
+		}
+		
+		AI = Selector(TargetInLoS, Selector(CanShoot, Shoot, () => {}), Wander);
 	}
 	
 	void Update () 
@@ -154,13 +191,8 @@ public class BotScript : Pathfinding
 			_waypoints[i].distanceFromTarget = Vector3.Distance (transform.position, _waypoints[i].position);
 		}
 		
-		if(Path.Count > 0)
-		{
-			Move ();
-		}
-		
 		AI();
 	}
-	
+
 	#endregion
 }

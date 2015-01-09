@@ -144,7 +144,7 @@ public class BasicBot : Pathfinding
 		GameObject newBullet = Instantiate (BulletPrefab, Gun.transform.position, Gun.transform.rotation) as GameObject;
 		Rigidbody rb = newBullet.GetComponent<Rigidbody>();
 		Physics.IgnoreCollision(newBullet.collider, collider); 
-		rb.velocity = (Target.transform.position - Gun.transform.position).normalized * 50.0f;
+		rb.velocity = (Gun.transform.position - Target.transform.position).normalized * 50.0f;
 	}
 
 	void LookAtTarget()
