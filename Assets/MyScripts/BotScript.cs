@@ -26,12 +26,12 @@ public class BotScript : Pathfinding
 	public GameObject Gun;
 	public GameObject BulletPrefab;
 	public List<string> HostileTags; //For this simulation I'm going to use "RedTeam", "BlueTeam", "Neutral"
-	private List<GameObject> Hostiles;
+	private List<GameObject> _hostiles = new List<GameObject>();
 	
 	private List<GameObject> _waypointObjects = new List<GameObject>();
 	private List<Waypoint> _waypoints = new List<Waypoint>();
 	
-	public float SightDistance = 25.0f;
+	public float SightDistance = 10.0f;
 	public float TurnRate = 10.0f;
 	public float FieldOfView = 110.0f;
 	public int ShotDelay = 100;
@@ -84,6 +84,7 @@ public class BotScript : Pathfinding
 	
 	bool TargetInLoS()
 	{
+		//TODO: Add Raycast so bots don't shoot fucking walls.
 		if(Target)
 		{
 			//Done
@@ -138,11 +139,36 @@ public class BotScript : Pathfinding
 		Move ();
 	}
 	
-	void CloseDistanceToTarget()
+	bool FoundTarget()
 	{
-	
+		RaycastHit[] hits;
+		hits = Physics.SphereCastAll(transform.position, 1.0f, transform.forward);
+		
+		foreach(RaycastHit hit in hits)
+		{
+			foreach(string t in HostileTags)
+			{
+				if(hit.collider.tag == t)
+				{
+					Debug.Log (tag + " hit " + t);
+					Target = hit.collider.gameObject;
+					return true;
+				}
+			}
+		}
+		
+		return false;
 	}
 	
+	void LookAtTarget()
+	{
+		//find the vector pointing from us to our target
+		Vector3 playerDir = (Target.transform.position - transform.position).normalized;
+		//create the rotation we need to be in to look at the target
+		Quaternion lookRotation = Quaternion.LookRotation (playerDir);
+		//rotate us over time according to our speed until we are in the required direction
+		transform.rotation = Quaternion.Slerp(transform.rotation, lookRotation, Time.deltaTime * TurnRate );
+	}
 
 	void Shoot()
 	{
@@ -174,15 +200,20 @@ public class BotScript : Pathfinding
 			_waypoints.Add(new Waypoint(waypoint.transform.position, false));
 		}
 		
-		foreach(string tag in HostileTags)
+		//Finds all hostile objects in the scene, adds them to our list of enemies. 
+		foreach(string t in HostileTags)
 		{
-			foreach(GameObject obj in GameObject.FindGameObjectsWithTag (tag))
+			foreach(GameObject obj in GameObject.FindGameObjectsWithTag (t))
 			{
-				Hostiles.Add (obj);
+				_hostiles.Add (obj);
+				//Debug.Log (tag + " object added " + t + " tag to its hostile list.");
 			}
+
 		}
 		
-		AI = Selector(TargetInLoS, Selector(CanShoot, Shoot, () => {}), Wander);
+		//AI = Selector(FoundTarget, Selector(TargetInLoS, Sequence(LookAtTarget, Shoot), LookAtTarget), Wander);
+		AI = Selector(FoundTarget, Shoot , Wander);
+		//AI = Wander;
 	}
 	
 	void Update () 
